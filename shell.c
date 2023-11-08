@@ -169,8 +169,9 @@ int main(int argc, char ** argv){
                     i1++;
                     start = j;
                 }*/
+                int q;
                 for(int h = j; h < len + 1; h++){    
-                    int q = count(str, i, h);
+                    q = count(str, i, h);
                     if ((str[i][q + 1] == ' ')||(str[i][q + 1] == '\t')||(str[i][q + 1] == '\0')){
                         str_ans[i1] = creat_str1(str[i], start, q + 1);
                         i1++;
@@ -180,7 +181,8 @@ int main(int argc, char ** argv){
                         h = q + 1;
                     }
                 }
-                break;
+                start = q + 1;
+                j = q;
             }
             //printf("TYT");
             if (check(str[i][j]) == 1){
