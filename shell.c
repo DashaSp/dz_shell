@@ -336,6 +336,9 @@ int main(int argc, char ** argv){
                 }
             }
         }
+        if(str_ans[0] == NULL){
+            continue;
+        }
         char *s = "cd";
         if (strcmp(str_ans[0], s) == 0){
             exec_cd(str_ans);
