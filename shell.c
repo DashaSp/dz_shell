@@ -202,10 +202,12 @@ int main(int argc, char ** argv){
             }            
         }
     }
+    //printf("%d", m);
     //int i = 0;
     int i1; 
     while ((str = get_str(f1)) != NULL){                        // считали строк
         i1 = 0;
+        //printf("TYT");
         char **str_ans = malloc(sizeof(char*)*m);
         if (f == 1){
             str = change(str);
@@ -336,9 +338,14 @@ int main(int argc, char ** argv){
                 }
             }
         }
-        if(str_ans[0] == NULL){
+        if((i1==0)||(str_ans[0] == NULL)){
+            free(str);
+            //char *str = malloc(sizeof(char)*m);
+            //free_str(str_ans, i1);
+            //printf("TYT1");
             continue;
         }
+        //printf("TYT2");
         char *s = "cd";
         if (strcmp(str_ans[0], s) == 0){
             exec_cd(str_ans);
@@ -347,10 +354,12 @@ int main(int argc, char ** argv){
         }
         //printf("%d", i1);
         free_str(str_ans, i1);
+        //free(str_ans);
         free(str);
         //str = malloc(sizeof(char)*m);
     }
     free(str);
-    free_str(str_ans, i1);
+    free(str_ans);
+    //free_str(str_ans, i1);
     return 0;
 }
