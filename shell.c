@@ -49,7 +49,7 @@ char* creat_str(char *str, int i, int j){           // функция для с�
     long long m = j - i;
     char *ans = malloc(sizeof(char)*(m+1));
     for (int t = 0; t<m; t++){
-        ans[t] = str[t+i];
+        ans[t] = str[t + i];
     }
     ans[m] = '\0';
     return ans;
@@ -103,12 +103,10 @@ char* creat_str1(char *str, int i, int j){           // функция для с
     int k = 0;
     char *ans = malloc(sizeof(char)*(m+1));
     for (int t = 0; t<m; t++){
-        if (str[t+i+k]=='"'){
+        if (str[t + i + k]=='"'){
             k++;
-            //printf("%d", t+i+k);
         }
-        ans[t] = str[t+i+k];
-        //printf("%c ", ans[t]);
+        ans[t] = str[t + i + k];
     }
     ans[m] = '\0';
     return ans;
@@ -180,10 +178,59 @@ int exec_cd(char **str) {
 	return 1;
 }
 
+
+void conv(char **str_ans, int i1) {            // конвейер
+    int k = -1, fd[2];
+    char **tmp = NULL;
+
+    for (int i = 0; i < i1; i++)
+        if (!strcmp(str_ans[i], "|")){
+            str_ans[i] = NULL;
+        } 
+
+    while (++k < i1){
+        if (k != 0 && str_ans[k] != NULL){
+            continue;
+        }
+        tmp = str_ans + k + 1 - (k == 0);
+        pipe(fd);
+        switch(fork()){
+            case -1: 
+                fprintf(stderr, "Error\n");
+                break;
+            case 0:
+                if (k + 2 - (k == 0) != i1) dup2(fd[1], 1);
+                close(fd[1]);
+                close(fd[0]);
+                execvp(tmp[0], tmp);
+                fprintf(stderr, "Invalide command\n");
+                exit(1);  
+            default:
+                dup2(fd[0], 0);
+                close(fd[0]);
+                close(fd[1]);
+                break;
+        }
+    }
+    while(wait(NULL) != -1);
+}
+
+void sigHndlr(char *str[]) {
+    if ((str[1] != NULL) && (strcmp(str[1], "&") == 0)) {
+        signal(SIGINT, SIG_IGN);
+        signal(SIGQUIT, SIG_IGN);
+        signal(SIGTSTP, SIG_IGN);
+    } else {
+        signal(SIGINT, SIG_DFL);
+        signal(SIGQUIT, SIG_DFL);
+        signal(SIGTSTP, SIG_DFL);
+    }
+}
+
 int main(int argc, char ** argv){ 
     FILE *f1 = stdin; 
     FILE *f2 = stdout;
-    
+    int chnl0 = dup(0), chnl1 = dup(1);
     int m = 10, f = 0;
     char *str = malloc(sizeof(char)*m);
     char **str_ans = malloc(sizeof(char*)*m);
@@ -202,18 +249,16 @@ int main(int argc, char ** argv){
             }            
         }
     }
-    //printf("%d", m);
-    //int i = 0;
+
     int i1; 
     while ((str = get_str(f1)) != NULL){                        // считали строк
         i1 = 0;
-        //printf("TYT");
         char **str_ans = malloc(sizeof(char*)*m);
         if (f == 1){
             str = change(str);
             f = 0;
         }
-
+        
         long long len = 0;
         len = strlen(str);
         int start = 0;
@@ -251,7 +296,6 @@ int main(int argc, char ** argv){
                 i = q;
             }
             if (check(str[i]) == 1){
-                //printf("TYT183");
                 if ((str[i] == '\0')&&(start != i)){           // конец строки
                     str_ans[i1] = creat_str(str, start, i);
                     i1++;
@@ -268,16 +312,12 @@ int main(int argc, char ** argv){
                 
                 if((start == i)&&((str[i]=='\t')||(str[i]==' '))){
                     start++;
-                    //printf("TYT200");
                     continue;
                 }
-                //printf("%d %d %d", start, i, g);
                 if((start == i)&&(g == 0)){                  // первое вхождение
-                    //printf("TYT");
                     if (((check(str[i+1]) == 1) &&(str[i+1] == str[i]))&& ((str[i] != '\t')||(str[i] != ' '))){     //&&, ||, <<, ...
                         str_ans[i1] = creat_str(str, i, i + 2);
                         i1++;
-                        //printf("TYT");
                         if (i1 >= m){
                             m = m * 2;
                             str_ans = realloc(str_ans, sizeof(char*)*m);
@@ -310,9 +350,7 @@ int main(int argc, char ** argv){
                         start = i + 1;
                         continue;
                     }
-                    //printf("TYT239");
                     if (((check(str[i+1]) == 1)&&(str[i+1] == str[i]))&&((str[i] != '\t')||(str[i] != ' '))){     //&&, ||, <<, ...
-                        //printf("241");
                         str_ans[i1] = creat_str(str, i, i + 2);
                         i1++;
                         if (i1 >= m){
@@ -324,7 +362,6 @@ int main(int argc, char ** argv){
                         continue;
                     }
                     if ((str[i] != '\t')||(str[i] != ' ')){     // &, <, ; ...
-                        //printf("TYT252");
                         str_ans[i1] = creat_str(str, i, i + 1);
                         i1++;
                         if (i1 >= m){
@@ -332,7 +369,6 @@ int main(int argc, char ** argv){
                             str_ans = realloc(str_ans, sizeof(char*)*m);
                         }
                         start = i + 1;
-                        //printf("%d %d\n", i, start);
                         continue;
                     }
                 }
@@ -340,26 +376,115 @@ int main(int argc, char ** argv){
         }
         if((i1==0)||(str_ans[0] == NULL)){
             free(str);
-            //char *str = malloc(sizeof(char)*m);
-            //free_str(str_ans, i1);
-            //printf("TYT1");
             continue;
+        } 
+        sigHndlr(str_ans);     
+        int fd1 = 0, fd2 = 1;
+        for(int i = 1; i<(i1-1); i++){
+            if (((strcmp(str_ans[i], "<") == 0) || (strcmp(str_ans[i], ">") == 0) || (strcmp(str_ans[i], ">>") == 0))) {
+                if (str_ans[i + 1]) {
+                    if (strcmp(str_ans[i], "<")) {
+                        if ((fd1 = open(str_ans[i + 1], O_RDONLY)) == -1) {
+                            perror("Error");
+                            exit(1);
+                        }
+                        if (dup2(fd1, 0) == (-1)) {
+                            perror("Error");
+                            exit(1);
+                        }
+                        if (close(fd1) == -1) {
+                            perror("Error");
+                            exit(1);
+                        }
+                    }
+                    if (strcmp(str_ans[i], ">")) {
+                        if (((fd2 = open(str_ans[i + 1], O_WRONLY|O_CREAT|O_TRUNC)) == (-1))) {
+                            perror("Error");
+                            exit(1);
+                        }
+                        if (dup2(fd2, 1) == -1) {
+                            perror("Error");
+                            exit(1);                            
+                        }
+                        if (close(fd2) == -1) {
+                            perror("Error");
+                            exit(1);
+                        }
+                    }
+                    if (strcmp(str_ans[i], ">>")) {
+                        if (((fd2 = open(str_ans[i + 1], O_WRONLY|O_CREAT|O_APPEND)) == (-1))) {
+                            perror("Error");
+                        }
+                        if (dup2(fd2, 1) == (-1)) {
+                            perror("Error");
+                        }
+                        if (close(fd2) == (-1)) {
+                            perror("Error");
+                        }
+                    }
+                }
+                if (fd1 == -1){
+                    close(fd1);
+                }else{ 
+                    dup2(fd1, 0);
+                }
+                if (fd2 == -1){ 
+                    close (fd2);
+                }else{ 
+                    dup2(fd2, 1);
+                }
+                for (int j = i; str_ans[j] != NULL; j++) {
+                    str_ans[j] = str_ans[j + 2];
+                }
+            }
         }
-        //printf("TYT2");
-        char *s = "cd";
-        if (strcmp(str_ans[0], s) == 0){
-            exec_cd(str_ans);
-        }else{
-            exec1(str_ans, i1);
+        for(int i = 1; i<(i1-1); i++){
+            if((str_ans[i] != NULL) && (strcmp(str_ans[i], "&") == 0)){
+                int pid;
+                if ((pid = fork()) == -1) {
+                    perror("Error");
+                }
+                else if (pid == 0){
+                    switch (fork()) { 
+                        case -1:
+                            perror("Error");
+                            exit(1);
+                        case 0:
+                            sigHndlr(str_ans); 
+                            str_ans[i] = NULL;
+                            if (execvp(str_ans[i], str_ans) == -1){
+                                perror("Error");
+                                exit(1);
+                            }
+                        default:
+                            exit(0);
+                    }
+                }
+                dup2(chnl0, 0);
+                dup2(chnl1, 1);
+            }
         }
-        //printf("%d", i1);
+        if ((str_ans[1] != NULL) && (strcmp(str_ans[1], "|") == 0)){
+            int chnl0 = dup(0), chnl1 = dup(1);
+            conv(str_ans, i1);
+            dup2(chnl0, 0);
+            dup2(chnl1, 1);
+        } else {
+            char *s = "cd";
+            if (strcmp(str_ans[0], s) == 0){
+                exec_cd(str_ans);
+            }else{
+                exec1(str_ans, i1);
+            }
+        }
         free_str(str_ans, i1);
-        //free(str_ans);
         free(str);
-        //str = malloc(sizeof(char)*m);
+        dup2(chnl0, 0);
+        dup2(chnl1, 1);
+        dup2(fd1, 0);
+        dup2(fd2, 1);
     }
     free(str);
     free(str_ans);
-    //free_str(str_ans, i1);
     return 0;
 }
