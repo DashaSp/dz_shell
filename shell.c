@@ -1,6 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
+#include <setjmp.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/wait.h>
 # define M 10
 
 int max1 = 0;
@@ -68,10 +75,10 @@ int check(char s){                    // функция для проверки
     }
 }
 
-int count(char **str, int i1, int j){          
-    int ans = strlen(str[i1]) - 1;
-    for(int i = j + 1; i<strlen(str[i1]); i++){
-        if(str[i1][i] == '"'){
+int count(char *str, int j){          
+    int ans = strlen(str) - 1;
+    for(int i = j + 1; i<strlen(str); i++){
+        if(str[i] == '"'){
             ans = i;
             return ans;
         }
@@ -108,20 +115,80 @@ char* creat_str1(char *str, int i, int j){           // функция для с
 }
 
 void printf_str(int n, char **str){        // функция для вывода строчек из массива
-    for ( int i =0; i<n; i++){
+    for ( int i = 0; i<n; i++){
         printf("%s\n", str[i]);
     }
 }
 
-int main(int argc, char ** argv){ 
+void free_str(char **str_ans, int i1){         // функция освобождания массива строк
+    for(int i = 0; i < i1; i++){
+        free(str_ans[i]);
+    }
+    free(str_ans);
+}
+
+char** creat_string(char **str_ans, int n){
+    char **ans = malloc(sizeof(char*)*(n-1));
+    for (int i = 0; i<n - 1; i++){
+        ans[i] = str_ans[i + 1];
+    }
+    return ans;
+}
+
+int exec1(char **str, int i1)
+{
+    pid_t pid;
+    int status;
+    pid = fork();
     
+    if (pid == 0) {          // сыновий процесс
+        if (execvp(str[0], str) == -1) {
+        perror(0);
+        }
+        exit(0);
+    } else if (pid < 0) {         // ошибка fork
+        perror(0);
+    } else {                     // родительский процесс
+        do {
+        waitpid(pid, &status, WUNTRACED);
+        } while (!WIFEXITED(status) && !WIFSIGNALED(status));
+    }
+    
+    return 0;
+}
+
+int exec_cd(char **str) {
+	if ((str[1]== NULL) || (str[2] == NULL)) {
+		if (str[1] == NULL){          //go to the home directory
+			if (chdir(getenv("HOME"))) {
+				perror("Error1");
+				return 1;
+			}
+		}else{
+            if (chdir(str[1])){  //go to the directory
+			perror("Error2");
+			return 1;
+            }
+        }
+		printf("Current directory is %s\n", getcwd(NULL, 0));	
+        return 0;
+	}
+	else {
+		fprintf(stderr, "invalid\n");
+		return 1;
+	}
+	return 1;
+}
+
+int main(int argc, char ** argv){ 
     FILE *f1 = stdin; 
     FILE *f2 = stdout;
     
-    int i = 0, m = 10, f = 0;
-    char **str = malloc(sizeof(char*)*m);
+    int m = 10, f = 0;
+    char *str = malloc(sizeof(char)*m);
+    char **str_ans = malloc(sizeof(char*)*m);
 
-    for (int i = 0; i < argc; i++) {
+    for (int i = 0 ; i < argc; i++) {
         if (strcmp(argv[i], "-i") == 0) {
             f = 1;
             if ((f1 = fopen(argv[i + 1], "r")) == NULL) {
@@ -135,33 +202,28 @@ int main(int argc, char ** argv){
             }            
         }
     }
-    i = 0; 
-    while ((str[i++] = get_str(f1)) != NULL){                        // считали строку
-        if (i >= m){
-            m = m * 2;
-            str = realloc(str, sizeof(char*)*m);
+    //printf("%d", m);
+    //int i = 0;
+    int i1; 
+    while ((str = get_str(f1)) != NULL){                        // считали строк
+        i1 = 0;
+        //printf("TYT");
+        char **str_ans = malloc(sizeof(char*)*m);
+        if (f == 1){
+            str = change(str);
+            f = 0;
         }
-    }
 
-    char **str_ans = malloc(sizeof(char*)*m);
-    int n = i - 1;                                                   //кол-во строк
-
-    if (f == 1){
-        str[0] = change(str[0]);
-    }
-    
-    int i1 = 0;
-    for (int i = 0; i < n; i++){
         long long len = 0;
-        len = strlen(str[i]);
+        len = strlen(str);
         int start = 0;
         int g = 0;
-        for (int j = 0; j<(len + 1); j++){
-            if (((str[i][j]=='\t')||(str[i][j]==' '))&&((str[i][j-1]=='\t')||(str[i][j-1]==' '))){         // не обращаем внимания на множество пробелов
+        for (int i = 0; i<(len + 1); i++){
+            if (((str[i]=='\t')||(str[i]==' '))&&((str[i-1]=='\t')||(str[i-1]==' '))){         // не обращаем внимания на множество пробелов
                 start++;
                 continue;
             }
-            if (str[i][j] == '"'){            // считываем пока не найдем " на строчке
+            if (str[i] == '"'){            // считываем пока не найдем " на строчке
                 /*if (start == j){
                     start++;
                 }else{
@@ -170,11 +232,15 @@ int main(int argc, char ** argv){
                     start = j;
                 }*/
                 int q;
-                for(int h = j; h < len + 1; h++){    
-                    q = count(str, i, h);
-                    if ((str[i][q + 1] == ' ')||(str[i][q + 1] == '\t')||(str[i][q + 1] == '\0')){
-                        str_ans[i1] = creat_str1(str[i], start, q + 1);
+                for(int h = i; h < len + 1; h++){    
+                    q = count(str, h);
+                    if ((str[q + 1] == ' ')||(str[q + 1] == '\t')||(str[q + 1] == '\0')){
+                        str_ans[i1] = creat_str1(str, start, q + 1);
                         i1++;
+                        if (i1 >= m){
+                            m = m * 2;
+                            str_ans = realloc(str_ans, sizeof(char*)*m);
+                        }
                         start = q + 1;
                         break;
                     }else{
@@ -182,67 +248,118 @@ int main(int argc, char ** argv){
                     }
                 }
                 start = q + 1;
-                j = q;
+                i = q;
             }
-            //printf("TYT");
-            if (check(str[i][j]) == 1){
-                
-                if ((str[i][j] == '\0')&&(start != j)){           // конец строки
-                    str_ans[i1] = creat_str(str[i], start, j);
+            if (check(str[i]) == 1){
+                //printf("TYT183");
+                if ((str[i] == '\0')&&(start != i)){           // конец строки
+                    str_ans[i1] = creat_str(str, start, i);
                     i1++;
+                    if (i1 >= m){
+                        m = m * 2;
+                        str_ans = realloc(str_ans, sizeof(char*)*m);
+                    }
                     break;
                 }
                 
-                if ((str[i][j] == '\0')&&(start == j)){      // ситуация "|\0"
+                if ((str[i] == '\0')&&(start == i)){      // ситуация "|\0"
                     break;
                 }
                 
-                if(start == j){
+                if((start == i)&&((str[i]=='\t')||(str[i]==' '))){
                     start++;
+                    //printf("TYT200");
                     continue;
                 }
-                
-                if((start == j)&&(g == 0)){                  // первое вхождение
-                    if ((check(str[i][j+1]) == 1) &&(str[i][j+1]==str[i][j])&& ((str[i][j] != '\t')||(str[i][j] != ' '))){     //&&, ||, <<, ...
-                        str_ans[i1] = creat_str(str[i], j, j + 2);
+                //printf("%d %d %d", start, i, g);
+                if((start == i)&&(g == 0)){                  // первое вхождение
+                    //printf("TYT");
+                    if (((check(str[i+1]) == 1) &&(str[i+1] == str[i]))&& ((str[i] != '\t')||(str[i] != ' '))){     //&&, ||, <<, ...
+                        str_ans[i1] = creat_str(str, i, i + 2);
                         i1++;
+                        //printf("TYT");
+                        if (i1 >= m){
+                            m = m * 2;
+                            str_ans = realloc(str_ans, sizeof(char*)*m);
+                        }
                         start = start + 2;
-                        j++;
+                        i++;
                         continue;
                     }
-                    if ((check(str[i][j+1]) == 0)&&((str[i][j] != '\t')||(str[i][j] != ' '))){    // &, <, ; ...
-                        str_ans[i1] = creat_str(str[i], j, j + 1);
+                    if (((str[i] != '\t')||(str[i] != ' '))){    // &, <, ; ...
+                        str_ans[i1] = creat_str(str, i, i + 1);
                         i1++;
+                        if (i1 >= m){
+                            m = m * 2;
+                            str_ans = realloc(str_ans, sizeof(char*)*m);
+                        }
                         start++;
                         continue;
                     }
                 }else{
                     g = 1;
-                    str_ans[i1] = creat_str(str[i], start, j);       // строка
-                    i1++;
-                    if ((str[i][j] == '\t')||(str[i][j] == ' ')){
-                        start = j + 1;
+                    if(start != i){
+                        str_ans[i1] = creat_str(str, start, i);       // строка
+                        i1++;
+                        if (i1 >= m){
+                                m = m * 2;
+                                str_ans = realloc(str_ans, sizeof(char*)*m);
+                        }
+                    }
+                    if ((str[i] == '\t')||(str[i] == ' ')){
+                        start = i + 1;
                         continue;
                     }
-
-                    if ((check(str[i][j+1]) == 1)&&(str[i][j+1] == str[i][j])&&((str[i][j] != '\t')||(str[i][j] != ' '))){     //&&, ||, <<, ...
-                        str_ans[i1] = creat_str(str[i], j, j + 2);
+                    //printf("TYT239");
+                    if (((check(str[i+1]) == 1)&&(str[i+1] == str[i]))&&((str[i] != '\t')||(str[i] != ' '))){     //&&, ||, <<, ...
+                        //printf("241");
+                        str_ans[i1] = creat_str(str, i, i + 2);
                         i1++;
-                        start = j + 2;
-                        j++;
+                        if (i1 >= m){
+                            m = m * 2;
+                            str_ans = realloc(str_ans, sizeof(char*)*m);
+                        }
+                        start = i + 2;
+                        i++;
                         continue;
                     }
-                    if ((check(str[i][j+1]) == 0)&&((str[i][j] != '\t')||(str[i][j] != ' '))){     // &, <, ; ...
-                        str_ans[i1] = creat_str(str[i], j, j + 1);
+                    if ((str[i] != '\t')||(str[i] != ' ')){     // &, <, ; ...
+                        //printf("TYT252");
+                        str_ans[i1] = creat_str(str, i, i + 1);
                         i1++;
-                        start = j + 1;
+                        if (i1 >= m){
+                            m = m * 2;
+                            str_ans = realloc(str_ans, sizeof(char*)*m);
+                        }
+                        start = i + 1;
+                        //printf("%d %d\n", i, start);
                         continue;
                     }
                 }
-            }else{
             }
         }
+        if((i1==0)||(str_ans[0] == NULL)){
+            free(str);
+            //char *str = malloc(sizeof(char)*m);
+            //free_str(str_ans, i1);
+            //printf("TYT1");
+            continue;
+        }
+        //printf("TYT2");
+        char *s = "cd";
+        if (strcmp(str_ans[0], s) == 0){
+            exec_cd(str_ans);
+        }else{
+            exec1(str_ans, i1);
+        }
+        //printf("%d", i1);
+        free_str(str_ans, i1);
+        //free(str_ans);
+        free(str);
+        //str = malloc(sizeof(char)*m);
     }
-    printf_str(i1, str_ans);
+    free(str);
+    free(str_ans);
+    //free_str(str_ans, i1);
     return 0;
 }
